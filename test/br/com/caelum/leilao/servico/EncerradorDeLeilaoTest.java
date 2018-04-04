@@ -3,6 +3,9 @@ package br.com.caelum.leilao.servico;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -13,7 +16,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.InOrder;
 
 import br.com.caelum.leilao.builder.CriadorDeLeilao;
 import br.com.caelum.leilao.dominio.Leilao;
@@ -21,79 +26,104 @@ import br.com.caelum.leilao.infra.dao.RepositorioDeLeiloes;
 
 public class EncerradorDeLeilaoTest {
 
-	@Test
-	public void deveEncerrarLeiloesQueComecaramUmaSemanaAtras() {
-		Calendar antiga = Calendar.getInstance();
+	private Calendar antiga;
+	private Leilao leilaoAntigo1;
+	private Leilao leilaoAntigo2;
+	private RepositorioDeLeiloes dao;
+	private Carteiro carteiro;
+	private EncerradorDeLeilao encerrador;
+	private Leilao leilaoOntem1;
+	private Leilao leilaoOntem2;
+	private Calendar ontem;
+
+	@Before
+	public void setup() {
+		antiga = Calendar.getInstance();
 		antiga.set(1999, 1, 20);
 
-		Leilao leilao1 = new CriadorDeLeilao().para("TV de plasma").naData(antiga).constroi();
-		Leilao leilao2 = new CriadorDeLeilao().para("Geladeira").naData(antiga).constroi();
+		ontem = Calendar.getInstance();
+		ontem.add(Calendar.DAY_OF_MONTH, -1);
 
-		RepositorioDeLeiloes dao = mock(RepositorioDeLeiloes.class);
-		EnviadorDeEmail carteiro = mock(EnviadorDeEmail.class);
+		leilaoAntigo1 = new CriadorDeLeilao().para("TV de plasma").naData(antiga).constroi();
+		leilaoAntigo2 = new CriadorDeLeilao().para("Geladeira").naData(antiga).constroi();
 
-		when(dao.correntes()).thenReturn(Arrays.asList(leilao1, leilao2));
+		leilaoOntem1 = new CriadorDeLeilao().para("TV de plasma").naData(ontem).constroi();
+		leilaoOntem2 = new CriadorDeLeilao().para("Geladeira").naData(ontem).constroi();
 
-		EncerradorDeLeilao encerrador = new EncerradorDeLeilao(dao, carteiro);
+		dao = mock(RepositorioDeLeiloes.class);
+		carteiro = mock(Carteiro.class);
+		encerrador = new EncerradorDeLeilao(dao, carteiro);
+	}
+
+	@Test
+	public void deveEncerrarLeiloesQueComecaramUmaSemanaAtras() {
+
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoAntigo1, leilaoAntigo2));
 		encerrador.encerra();
 
 		assertEquals(2, encerrador.getTotalEncerrados());
-		assertTrue(leilao1.isEncerrado());
-		assertTrue(leilao2.isEncerrado());
+		assertTrue(leilaoAntigo1.isEncerrado());
+		assertTrue(leilaoAntigo2.isEncerrado());
 	}
 
 	@Test
 	public void naoDeveEcerrarLeiloesQueComecaramMenosDeUmasemana() {
-		Calendar ontem = Calendar.getInstance();
-		ontem.add(Calendar.DAY_OF_MONTH, -1);
-		Leilao leilao1 = new CriadorDeLeilao().para("TV de plasma").naData(ontem).constroi();
-		Leilao leilao2 = new CriadorDeLeilao().para("Geladeira").naData(ontem).constroi();
 
-		RepositorioDeLeiloes dao = mock(RepositorioDeLeiloes.class);
-		EnviadorDeEmail carteiro = mock(EnviadorDeEmail.class);
-
-		when(dao.correntes()).thenReturn(Arrays.asList(leilao1, leilao2));
-
-		EncerradorDeLeilao encerrador = new EncerradorDeLeilao(dao, carteiro);
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoOntem1, leilaoOntem2));
 		encerrador.encerra();
-
 		assertEquals(0, encerrador.getTotalEncerrados());
-		assertFalse(leilao1.isEncerrado());
-		assertFalse(leilao2.isEncerrado());
-
-		verify(dao, never()).atualiza(leilao1);
-		verify(dao, never()).atualiza(leilao2);
+		assertFalse(leilaoOntem1.isEncerrado());
+		assertFalse(leilaoOntem2.isEncerrado());
+		verify(dao, never()).atualiza(leilaoOntem1);
+		verify(dao, never()).atualiza(leilaoOntem2);
 	}
 
 	@Test
 	public void naoDeveEncerrarLeiloesCasoNaoHajaNenhum() {
-		RepositorioDeLeiloes dao = mock(RepositorioDeLeiloes.class);
-		EnviadorDeEmail carteiro = mock(EnviadorDeEmail.class);
-
 		when(dao.correntes()).thenReturn(new ArrayList<Leilao>());
-		EncerradorDeLeilao encerradorDeLeilao = new EncerradorDeLeilao(dao, carteiro);
-		encerradorDeLeilao.encerra();
-		assertEquals(0, encerradorDeLeilao.getTotalEncerrados());
+		encerrador.encerra();
+		assertEquals(0, encerrador.getTotalEncerrados());
 	}
 
 	@Test
 	public void deveAtualizarLeiloesEncerrados() {
-
-		Calendar antiga = Calendar.getInstance();
-		antiga.set(1999, 1, 20);
-
-		Leilao leilao1 = new CriadorDeLeilao().para("TV de plasma").naData(antiga).constroi();
-
-		RepositorioDeLeiloes daoFalso = mock(RepositorioDeLeiloes.class);
-		EnviadorDeEmail carteiro = mock(EnviadorDeEmail.class);
-
-		when(daoFalso.correntes()).thenReturn(Arrays.asList(leilao1));
-
-		EncerradorDeLeilao encerrador = new EncerradorDeLeilao(daoFalso, carteiro);
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoAntigo1));
 		encerrador.encerra();
+		verify(dao, times(1)).atualiza(leilaoAntigo1);
+	}
 
-		// verificando que o metodo atualiza foi realmente invocado, somente uma
-		// vez!
-		verify(daoFalso, times(1)).atualiza(leilao1);
+	@Test
+	public void deveEnviarEmailAposPersistirLeilaoEncerrado() {
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoAntigo1));
+		encerrador.encerra();
+		InOrder inOrder = inOrder(dao, carteiro);
+		inOrder.verify(dao, times(1)).atualiza(leilaoAntigo1);
+		inOrder.verify(carteiro, times(1)).envia(leilaoAntigo1);
+	}
+
+	@Test
+	public void deveContinuarAExecucaoAposFalhaDoDao() {
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoAntigo1, leilaoAntigo2));
+		doThrow(new RuntimeException()).when(dao).atualiza(leilaoAntigo1);
+		encerrador.encerra();
+		verify(dao).atualiza(leilaoAntigo2);
+		verify(carteiro).envia(leilaoAntigo2);
+	}
+
+	@Test
+	public void deveContinuarAExecucaoAposFalhaCorreio() {
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoAntigo1, leilaoAntigo2));
+		doThrow(new RuntimeException()).when(carteiro).envia(leilaoAntigo1);
+		encerrador.encerra();
+		verify(dao).atualiza(leilaoAntigo2);
+		verify(carteiro).envia(leilaoAntigo2);
+	}
+
+	@Test
+	public void deveGarantirQueOCorreioNuncaEInvocado() {
+		when(dao.correntes()).thenReturn(Arrays.asList(leilaoAntigo1, leilaoAntigo2));
+		doThrow(new RuntimeException()).when(dao).atualiza(any(Leilao.class));
+		encerrador.encerra();
+		verify(carteiro, never()).envia(any(Leilao.class));
 	}
 }

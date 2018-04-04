@@ -10,9 +10,9 @@ public class EncerradorDeLeilao {
 
 	private int total = 0;
 	private final RepositorioDeLeiloes dao;
-	private final EnviadorDeEmail carteiro;
+	private final Carteiro carteiro;
 
-	public EncerradorDeLeilao(RepositorioDeLeiloes dao, EnviadorDeEmail carteiro) {
+	public EncerradorDeLeilao(RepositorioDeLeiloes dao, Carteiro carteiro) {
 		this.dao = dao;
 		this.carteiro = carteiro;
 	}
@@ -21,12 +21,15 @@ public class EncerradorDeLeilao {
 		List<Leilao> todosLeiloesCorrentes = dao.correntes();
 
 		for (Leilao leilao : todosLeiloesCorrentes) {
-			if (comecouSemanaPassada(leilao)) {
-				System.out.println("oi");
-				leilao.encerra();
-				total++;
-				dao.atualiza(leilao);
-				carteiro.envia(leilao);
+			try {
+				if (comecouSemanaPassada(leilao)) {
+					leilao.encerra();
+					total++;
+					dao.atualiza(leilao);
+					carteiro.envia(leilao);
+				}
+			} catch (Exception ex) {
+				// logo a excecao no sistema de logs e o loop continua!
 			}
 		}
 	}
